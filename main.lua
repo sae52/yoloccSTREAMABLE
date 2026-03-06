@@ -4,7 +4,7 @@
 getgenv().YoloCC = {
 
     ["Auth"] = {
-        ["Key"] = "put_your_key_here"
+        ["Key"] = "yolo123"
     },
 
     ["Keybinds"] = {
