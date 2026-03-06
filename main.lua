@@ -1,83 +1,109 @@
+--====================================================
+-- CONFIGURATION TABLE (VISIBLE TO USER)
+--====================================================
+getgenv().YoloCC = {
+
+    ["Auth"] = {
+        ["Key"] = "put_your_key_here"
+    },
+
+    ["Keybinds"] = {
+        ["LockKey"] = "T",
+        ["WalkKey"] = "C"
+    },
+
+    ["Visuals"] = {
+        ["ESP"] = true
+    },
+
+    ["Aim"] = {
+        ["PredictionX"] = 0.3,
+        ["PredictionY"] = 0.3,
+        ["CamSmooth"] = 0.15,
+        ["WallCheck"] = false
+    },
+
+    ["Player"] = {
+        ["WalkSpeedValue"] = 50,
+        ["DefaultSpeed"] = 16
+    },
+
+    ["GunMods"] = {
+        ["Spread"] = {
+            ["Enabled"] = true,
+            ["Amount"] = 2
+        },
+
+        ["Range"] = {
+            ["Enabled"] = true,
+            ["Distance"] = 5000
+        }
+    }
+}
+
+--====================================================
+-- SCRIPT (PRIVATE LOGIC)
+--====================================================
+
 local Config = getgenv().YoloCC
-if not Config then return end
 
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
-
-local LP = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
---================ AUTH =================
+local LP = Players.LocalPlayer
+
+--====================================================
+-- USER AUTH
+--====================================================
 
 local AuthorizedUsers = {
-    [1377661103] = "yolo_1377"
+    [1377661103]  = "yolo_1377",
+    [10378796065] = "yolo_1037",
+    [9946960712]  = "yolo_9946",
+    [299971754]   = "yolo_2999",
+    [4823006830]  = "yolo_4823",
+    [496476050]   = "yolo_4964",
+    [9198817302]  = "yolo_9198",
 }
 
 local requiredKey = AuthorizedUsers[LP.UserId]
 
 if not requiredKey then
-    warn("Unauthorized user")
+    warn("UserID not authorized")
     return
 end
 
 if Config.Auth.Key ~= requiredKey then
-    warn("Invalid key")
+    warn("Invalid key for this UserID")
     return
 end
 
---================ STATES =================
+--====================================================
+-- STATES
+--====================================================
 
 local States = {
     Aimlock = false,
-    WalkSpeed = false
+    Walk = false
 }
 
 local LockedTarget = nil
 local ESPObjects = {}
 
---================ TARGETING =================
-
-local function getClosest()
-
-    local closest = nil
-    local dist = math.huge
-    local screenCenter = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
-
-    for _,plr in pairs(Players:GetPlayers()) do
-
-        if plr ~= LP and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-
-            local pos,vis = Camera:WorldToViewportPoint(plr.Character.HumanoidRootPart.Position)
-
-            if vis then
-
-                local mag = (Vector2.new(pos.X,pos.Y) - screenCenter).Magnitude
-
-                if mag < dist then
-                    dist = mag
-                    closest = plr
-                end
-
-            end
-        end
-    end
-
-    return closest
-end
-
---================ ESP =================
+--====================================================
+-- ESP
+--====================================================
 
 local function createESP(player)
 
-    if ESPObjects[player] then return end
-
     local text = Drawing.new("Text")
-
+    text.Visible = false
     text.Center = true
     text.Outline = true
-    text.Size = 12
-    text.Visible = false
+    text.Font = 2
+    text.Size = 13
     text.Color = Color3.fromRGB(255,255,255)
 
     ESPObjects[player] = text
@@ -102,7 +128,76 @@ Players.PlayerRemoving:Connect(function(p)
     end
 end)
 
---================ RENDER LOOP =================
+RunService.RenderStepped:Connect(function()
+
+    if not Config.Visuals.ESP then
+        for _,draw in pairs(ESPObjects) do
+            draw.Visible = false
+        end
+        return
+    end
+
+    for player,draw in pairs(ESPObjects) do
+
+        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+
+            local root = player.Character.HumanoidRootPart
+            local pos,onScreen = Camera:WorldToViewportPoint(root.Position)
+
+            if onScreen then
+                draw.Position = Vector2.new(pos.X,pos.Y-20)
+                draw.Text = player.DisplayName
+                draw.Visible = true
+            else
+                draw.Visible = false
+            end
+
+        else
+            draw.Visible = false
+        end
+
+    end
+
+end)
+
+--====================================================
+-- TARGET FINDER
+--====================================================
+
+local function getClosest()
+
+    local closest
+    local dist = math.huge
+
+    local mouse = UIS:GetMouseLocation()
+
+    for _,p in pairs(Players:GetPlayers()) do
+
+        if p ~= LP and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+
+            local pos,onScreen = Camera:WorldToViewportPoint(p.Character.HumanoidRootPart.Position)
+
+            if onScreen then
+
+                local mag = (Vector2.new(pos.X,pos.Y) - mouse).Magnitude
+
+                if mag < dist then
+                    dist = mag
+                    closest = p
+                end
+
+            end
+
+        end
+
+    end
+
+    return closest
+end
+
+--====================================================
+-- AIMLOCK + WALKSPEED
+--====================================================
 
 local currentSpeed = Config.Player.DefaultSpeed
 
@@ -110,15 +205,17 @@ RunService.RenderStepped:Connect(function()
 
     if LP.Character and LP.Character:FindFirstChild("Humanoid") then
 
-        local targetSpeed = States.WalkSpeed and Config.Player.WalkSpeedValue or Config.Player.DefaultSpeed
-        currentSpeed = currentSpeed + (targetSpeed-currentSpeed)*0.2
+        local targetSpeed = States.Walk and Config.Player.WalkSpeedValue or Config.Player.DefaultSpeed
+
+        currentSpeed = currentSpeed + (targetSpeed-currentSpeed)*0.12
+
         LP.Character.Humanoid.WalkSpeed = currentSpeed
 
     end
 
     if States.Aimlock then
 
-        if not LockedTarget then
+        if not LockedTarget or not LockedTarget.Character then
             LockedTarget = getClosest()
         end
 
@@ -126,9 +223,10 @@ RunService.RenderStepped:Connect(function()
 
             local hrp = LockedTarget.Character.HumanoidRootPart
 
-            local pred = hrp.Velocity * Vector3.new(Config.Aim.PredictionX,Config.Aim.PredictionY,Config.Aim.PredictionX)
+            local predX = Config.Aim.PredictionX
+            local predY = Config.Aim.PredictionY
 
-            local predicted = hrp.Position + pred
+            local predicted = hrp.Position + (hrp.Velocity * Vector3.new(predX,predY,predX))
 
             Camera.CFrame = Camera.CFrame:Lerp(
                 CFrame.new(Camera.CFrame.Position,predicted),
@@ -141,36 +239,33 @@ RunService.RenderStepped:Connect(function()
         LockedTarget = nil
     end
 
-    if Config.Visuals.ESP then
-
-        for player,draw in pairs(ESPObjects) do
-
-            if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-
-                local pos,vis = Camera:WorldToViewportPoint(player.Character.HumanoidRootPart.Position)
-
-                if vis then
-                    draw.Position = Vector2.new(pos.X,pos.Y-20)
-                    draw.Text = player.DisplayName
-                    draw.Visible = true
-                else
-                    draw.Visible = false
-                end
-
-            else
-                draw.Visible = false
-            end
-
-        end
-
-    end
-
 end)
 
---================ GUN MODS =================
+--====================================================
+-- BULLET MODIFIER
+--====================================================
 
-local oldNamecall
-oldNamecall = hookmetamethod(game,"__namecall",newcclosure(function(self,...)
+local function applySpread(dir,spread)
+
+    if spread <= 0 then
+        return dir.Unit
+    end
+
+    local spreadRad = math.rad(spread)
+
+    local rx = (math.random()-0.5)*2
+    local ry = (math.random()-0.5)*2
+
+    local offset = Vector3.new(rx,ry,0)*math.tan(spreadRad)
+
+    local cf = CFrame.lookAt(Vector3.zero,dir.Unit)
+
+    return (cf:VectorToWorldSpace(offset)+dir.Unit).Unit
+
+end
+
+local old
+old = hookmetamethod(game,"__namecall",newcclosure(function(self,...)
 
     local args = {...}
     local method = getnamecallmethod()
@@ -182,36 +277,43 @@ oldNamecall = hookmetamethod(game,"__namecall",newcclosure(function(self,...)
 
         if origin and direction then
 
-            local newDir = direction.Unit
-            local dist = direction.Magnitude
+            local mods = Config.GunMods
+            local dir = direction.Unit
 
-            if Config.GunMods.Range.Enabled then
-                dist = Config.GunMods.Range.Distance
+            if mods.Spread.Enabled then
+                dir = applySpread(dir,mods.Spread.Amount)
             end
 
-            args[2] = newDir * dist
+            local dist = mods.Range.Enabled and mods.Range.Distance or direction.Magnitude
 
-            return oldNamecall(self,unpack(args))
+            args[2] = dir*dist
 
+            return old(self,unpack(args))
         end
+
     end
 
-    return oldNamecall(self,...)
+    return old(self,...)
 
 end))
 
---================ KEYBINDS =================
+--====================================================
+-- INPUT HANDLER
+--====================================================
 
 UIS.InputBegan:Connect(function(input,gp)
 
     if gp then return end
+    if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
 
-    if input.KeyCode == Config.Keybinds.LockKey then
+    local key = input.KeyCode.Name
+
+    if key == Config.Keybinds.LockKey then
         States.Aimlock = not States.Aimlock
     end
 
-    if input.KeyCode == Config.Keybinds.WalkKey then
-        States.WalkSpeed = not States.WalkSpeed
+    if key == Config.Keybinds.WalkKey then
+        States.Walk = not States.Walk
     end
 
 end)
